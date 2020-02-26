@@ -1,0 +1,55 @@
+Determining if the pthread_create exist failed with the following output:
+Change Dir: /home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_082bf/fast"
+/usr/bin/make -f CMakeFiles/cmTC_082bf.dir/build.make CMakeFiles/cmTC_082bf.dir/build
+make[1]: Entering directory '/home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_082bf.dir/CheckSymbolExists.c.o
+/usr/bin/cc    -o CMakeFiles/cmTC_082bf.dir/CheckSymbolExists.c.o   -c /home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+Linking C executable cmTC_082bf
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_082bf.dir/link.txt --verbose=1
+/usr/bin/cc      -rdynamic CMakeFiles/cmTC_082bf.dir/CheckSymbolExists.c.o  -o cmTC_082bf 
+CMakeFiles/cmTC_082bf.dir/CheckSymbolExists.c.o: In function `main':
+CheckSymbolExists.c:(.text+0x1b): undefined reference to `pthread_create'
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_082bf.dir/build.make:97: recipe for target 'cmTC_082bf' failed
+make[1]: *** [cmTC_082bf] Error 1
+make[1]: Leaving directory '/home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_082bf/fast' failed
+make: *** [cmTC_082bf/fast] Error 2
+
+File /home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <pthread.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef pthread_create
+  return ((int*)(&pthread_create))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/make" "cmTC_f80d8/fast"
+/usr/bin/make -f CMakeFiles/cmTC_f80d8.dir/build.make CMakeFiles/cmTC_f80d8.dir/build
+make[1]: Entering directory '/home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_f80d8.dir/CheckFunctionExists.c.o
+/usr/bin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_f80d8.dir/CheckFunctionExists.c.o   -c /usr/share/cmake-3.10/Modules/CheckFunctionExists.c
+Linking C executable cmTC_f80d8
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f80d8.dir/link.txt --verbose=1
+/usr/bin/cc  -DCHECK_FUNCTION_EXISTS=pthread_create    -rdynamic CMakeFiles/cmTC_f80d8.dir/CheckFunctionExists.c.o  -o cmTC_f80d8 -lpthreads 
+/usr/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+CMakeFiles/cmTC_f80d8.dir/build.make:97: recipe for target 'cmTC_f80d8' failed
+make[1]: *** [cmTC_f80d8] Error 1
+make[1]: Leaving directory '/home/droval/Desktop/EE4308/Lab2/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_f80d8/fast' failed
+make: *** [cmTC_f80d8/fast] Error 2
+
+

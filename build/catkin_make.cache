@@ -1,0 +1,2 @@
+pkg
+-DCATKIN_DEVEL_PREFIX=/home/droval/Desktop/EE4308/Lab2/devel -DCMAKE_INSTALL_PREFIX=/home/droval/Desktop/EE4308/Lab2/install -G Unix Makefiles
