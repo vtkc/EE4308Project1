@@ -556,6 +556,191 @@ class OpenList:
                 cell.idx[0], cell.idx[1], cell.f_cost.total, cell.g_cost.total, cell.h_cost.total)
         return s
     
+class JPS:
+#fnb_cell is forced neighbours
+    def __init__(self, occ_grid):
+        self.occ_grid = occ_grid
+        self.open_list = OpenList()
+        self.itr = 0
+
+    def get_path(self, start_idx, goal_idx):
+        #initialization phase
+        occ_grid = self.occ_grid
+        open_list = self.open_list
+        ni, nj = occ_grid.num_idx
+        path = []
+
+        # resets h-cost, g-cost, update and occ for all cells
+        for i in xrange(ni):
+            for j in xrange(nj):
+                occ_grid.cells[i][j].reset_for_planner(goal_idx)      
+
+        start_cell = occ_grid.idx2cell(start_idx)
+        start_cell.set_g_cost(Distance(0, 0))
+        prev_cell = start_cell
+
+        #Move to cheapest neighbour around start cell (only needs to be done once)
+        for nb_cell in self.get_free_neighbors(start_cell):
+            tentative_g_cost = Distance.from_separation(nb_cell.idx, start_cell.idx ) + start_cell.g_cost
+            if tentative_g_cost < nb_cell.g_cost:
+                nb_cell.set_g_cost(tentative_g_cost)
+                nb_cell.parent = start_cell
+                nb_cell.parent.idx = start_cell.idx
+                open_list.add(nb_cell)
+        print(open_list)
+
+        #propagate
+        while open_list.not_empty():
+
+            '''Get current cell and check if it is visited'''
+            current_cell = open_list.remove()
+            if current_cell.visited:
+                continue
+            else:
+                current_cell.visited = True
+
+            '''Found goal, then get path from start to goal'''
+            if current_cell.idx == goal_idx:
+                while True:
+                    path.append(current_cell.idx)
+                    current_cell = occ_grid.idx2cell(current_cell.parent.idx)
+                    if current_cell.parent is None:
+                        break
+                print("path found and returned")
+                break
+
+            #Get forward direction
+            fwd_direction = (current_cell.idx[0] - current_cell.parent.idx[0], current_cell.idx[1] - current_cell.parent.idx[1])
+
+            #Search in direction of cheapest cell in open list
+            if (abs(fwd_direction[0]),abs(fwd_direction[1])) == (1,1): #Ordinal case    
+                self.ordinal_search(current_cell, fwd_direction) 
+            else:                           #Cardinal case      
+                self.cardinal_search(current_cell, fwd_direction)
+        print(path)
+        return path
+
+    def ordinal_search(self,current_cell, fwd_direction):
+
+        #get directions for cardinal search
+        i = compass.index(fwd_direction)
+        if i+1 > 7: j = 0
+        else: j = i+1
+        
+        #perform cardinal search for both sides
+        self.cardinal_search(current_cell, compass[i-1])
+        self.cardinal_search(current_cell, compass[j])
+
+        while True:
+            #Get forward cell
+            fwd_cell = self.occ_grid.idx2cell((current_cell.idx[0] + fwd_direction[0],current_cell.idx[1] + fwd_direction[1]))
+            #check for forced neighbours
+            forced_nbs = self.get_forced_neighbours(current_cell, fwd_direction)
+
+            #check forced_nb exists and add to open list if cheaper
+            if forced_nbs is not None:
+                #Loop through and add forced neighbour to open list if it is cheaper
+                for forced_nb in forced_nbs:
+                    tentative_g_cost = Distance.from_separation(forced_nb.idx, current_cell.idx ) + current_cell.g_cost
+                    if forced_nb.g_cost > tentative_g_cost:
+                        forced_nb.set_g_cost(tentative_g_cost)
+                        forced_nb.parent = current_cell
+                        forced_nb.parent.idx = current_cell.idx
+                        self.open_list.add(forced_nb)
+                #Check if front cell is accessible and add to open list if cheaper
+                if fwd_cell is not None and fwd_cell.is_planner_free():
+                    #add fwd cell to open list if it is cheaper
+                    tentative_g_cost = Distance.from_separation(fwd_cell.idx, current_cell.idx) + current_cell.g_cost
+                    if fwd_cell.g_cost > tentative_g_cost:
+                        fwd_cell.set_g_cost(tentative_g_cost)
+                        fwd_cell.parent = current_cell
+                        fwd_cell.parent.idx = current_cell.idx
+                        self.open_list.add(fwd_cell)
+                break
+            #move forward if forced_nb doesn't exist but can move forward
+            elif fwd_cell is not None and fwd_cell.is_planner_free():
+                current_cell =  fwd_cell
+            #break search if cannot move forward
+            else:
+                break
+
+    def cardinal_search(self, current_cell, fwd_direction):
+        while True:
+            #Get forward cell
+            fwd_cell = self.occ_grid.idx2cell((current_cell.idx[0] + fwd_direction[0],current_cell.idx[1] + fwd_direction[1]))
+            #check for forced neighbours
+            forced_nbs = self.get_forced_neighbours(current_cell, fwd_direction)
+
+            #check forced_nb exists and add to open list if cheaper
+            if forced_nbs is not None:
+                #Loop through and add forced neighbour to open list if it is cheaper
+                for forced_nb in forced_nbs:
+                    tentative_g_cost = Distance.from_separation(forced_nb.idx, current_cell.idx ) + current_cell.g_cost
+                    if forced_nb.g_cost > tentative_g_cost:
+                        forced_nb.set_g_cost(tentative_g_cost)
+                        forced_nb.parent = current_cell
+                        forced_nb.parent.idx = current_cell.idx
+                        self.open_list.add(forced_nb)
+                #Check if front cell is accessible and add to open list if cheaper
+                if fwd_cell is not None and fwd_cell.is_planner_free():
+                    #add fwd cell to open list if it is cheaper
+                    tentative_g_cost = Distance.from_separation(fwd_cell.idx, current_cell.idx) + current_cell.g_cost
+                    if fwd_cell.g_cost > tentative_g_cost:
+                        fwd_cell.set_g_cost(tentative_g_cost)
+                        fwd_cell.parent = current_cell
+                        fwd_cell.parent.idx = current_cell.idx
+                        self.open_list.add(fwd_cell)
+                break
+            #move forward if forced_nb doesn't exist but can move forward
+            elif fwd_cell is not None and fwd_cell.is_planner_free():
+                current_cell =  fwd_cell
+            #break search if cannot move forward
+            else:
+                break
+    
+    def get_free_neighbors(self, cell):
+        # start from +x (N), counter clockwise
+        occ_grid = self.occ_grid
+        neighbors = []
+        idx = cell.idx #idx of current cell
+        for rel_idx in REL_IDX:
+            nb_idx = (rel_idx[0] + idx[0], rel_idx[1] + idx[1]) #non-numpy
+            nb_cell = occ_grid.idx2cell(nb_idx)
+            #if nb_cell exists and nb_cell is free
+            if nb_cell is not None and nb_cell.is_planner_free():
+                neighbors.append(nb_cell)
+        return neighbors
+
+    def get_forced_neighbours(self, current_cell, direction):
+        i = compass.index(direction)
+        idx = current_cell.idx
+        i_plus_1 = i+1
+        i_plus_2 = i+2
+        if i == 6:
+            i_plus_1 = 7
+            i_plus_2 = 0
+        if i == 7:
+            i_plus_1 = 0
+            i_plus_2 = 1
+
+        nbs = []
+        fwd_cell = self.occ_grid.idx2cell((idx[0] + direction[0],idx[1] + direction[1]))
+    
+        #Only checks for forced neighbours if fwd cell is not occupied
+        if fwd_cell is not None and (fwd_cell.is_planner_free()):
+            L_cell = self.occ_grid.idx2cell( (idx[0] + (compass[i-2])[0], idx[1] + (compass[i-2])[1] )) #potential obstacle
+            R_cell = self.occ_grid.idx2cell(( idx[0] + (compass[i_plus_2])[0], idx[1] + (compass[i_plus_2])[1] )) #potential obstacle           
+            #Check left and right cells for forced nb
+            if (L_cell is not None) and not (L_cell.is_planner_free()):
+                L_diag_cell = self.occ_grid.idx2cell(( idx[0] + (compass[i-1])[0], idx[1] + (compass[i-1])[1] )) #potential forced neighbour
+                if L_diag_cell is not None and L_diag_cell.is_planner_free():
+                    nbs.append(L_diag_cell)
+            if (R_cell is not None) and not (R_cell.is_planner_free()):
+                R_diag_cell = self.occ_grid.idx2cell(( idx[0] + (compass[i_plus_1])[0], idx[1] + (compass[i_plus_1])[1] )) #potential forced neighbour
+                if R_diag_cell is not None and R_diag_cell.is_planner_free():
+                    nbs.append(R_diag_cell)
+        return nbs
+    
 # =============================== SUBSCRIBERS =========================================  
 def subscribe_true(msg):
     # subscribes to the robot's true position in the simulator. This should not be used, for checking only.
