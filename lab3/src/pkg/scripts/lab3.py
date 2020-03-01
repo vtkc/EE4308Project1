@@ -52,6 +52,351 @@ def get_scan():
     read_scan = False
     return scan
 
+# =============================== MOTION PLANNER =========================================  
+class JPS:
+    def __init__(self, occ_grid):
+        self.occ_grid = occ_grid
+        self.open_list = []
+    def get_path(self, start_idx, goal_idx):
+        path = []
+        ni, nj = self.occ_grid.num_idx
+        # resets h-cost, g-cost, update and occ for all cells
+        for i in xrange(ni):
+            for j in xrange(nj):
+                dj = fabs(self.occ_grid.cells[i][j][7][1] - goal_idx[1])
+                di = fabs(self.occ_grid.cells[i][j][7][0] - goal_idx[0])
+                if dj > di:
+                    a0,a1 = di, dj-di
+                else:
+                    a0,a1 = dj, di-dj
+                self.occ_grid.cells[i][j][1] = [inf, inf, inf]
+                self.occ_grid.cells[i][j][2] = [inf, inf, inf]
+                self.occ_grid.cells[i][j][3] = [int64(a0), int64(a1), SQRT2 * int64(a0) + int64(a1) ]
+                self.occ_grid.cells[i][j][4] = False
+                self.occ_grid.cells[i][j][5] = None
+                self.occ_grid.cells[i][j][6] = 0                
+
+        start_cell = self.occ_grid.idx2cell(start_idx)
+        start_cell[2] = [0, 0, 0]
+        start_cell[1] = [start_cell[2][0] + start_cell[3][0], start_cell[2][1] + start_cell[3][1], start_cell[2][2] + start_cell[3][2]]
+        #Move to cheapest neighbour around start cell (only needs to be done once)
+        for nb_cell in self.get_free_neighbors(start_cell):
+            ############COMPARE G COST############
+            a = nb_cell[7]
+            b = start_cell[7]
+            dj = fabs(a[1] - b[1])
+            di = fabs(a[0] - b[0])
+            if dj > di:
+                a0 = di
+                a1 = dj-di
+            else:
+                a0 = dj
+                a1 = di-dj
+            dist_sep_g_cost = [float64(a0), float64(a1), SQRT2 * float64(a0) + float64(a1)]
+            A = dist_sep_g_cost
+            B = start_cell[2]         
+            C = [A[0] + B[0] , A[1] + B[1], A[2] + B[2] ]   
+            tentative_g_cost = C
+            if nb_cell[2][2] > tentative_g_cost[2]:
+            ############COMPARE G COST############
+
+                ############SET NB_CELL############
+                nb_cell[2] = tentative_g_cost
+                nb_cell[1] = [nb_cell[2][0] + nb_cell[3][0], nb_cell[2][1] + nb_cell[3][1], nb_cell[2][2] + nb_cell[3][2]] 
+                nb_cell[5] = start_cell
+                nb_cell[10] = [start_cell[7][0], start_cell[7][1]]
+                ############SET NB_CELL############
+
+                ############ADD AND SORT############
+                if not self.open_list:
+                    self.open_list.append(nb_cell)
+                else: 
+                    i = 0; nl = len(self.open_list)
+                    while i < nl:
+                        list_cell = self.open_list[i] 
+                        if nb_cell[1][2] < list_cell[1][2]:
+                            break
+                        elif nb_cell[1][2] == list_cell[1][2] and nb_cell[3][2] < list_cell[3][2]: 
+                            break
+                        i += 1  
+                    self.open_list.insert(i, nb_cell)                  
+                ############ADD AND SORT############
+
+        ###########################PROPAGATE###########################
+        while len(self.open_list) >0:
+
+            #Get current cell and check if it is visited
+            current_cell = self.open_list.pop(0)
+            if current_cell[4]: continue
+            else: current_cell[4] = True
+
+            #Found goal
+            if current_cell[7] == goal_idx:
+                while True:
+                    path.append(current_cell[7])
+                    current_cell =  self.occ_grid.idx2cell(current_cell[10])
+                    if current_cell[5] is None:
+                        break
+                break
+
+            #PROBLEM!!!!! current_cell.parent == None:
+            fwd_direction = (current_cell[7][0] - current_cell[10][0], current_cell[7][1] - current_cell[10][1])
+            
+            if (abs(fwd_direction[0]),abs(fwd_direction[1])) == (1,1): 
+                self.ordinal_search(current_cell, fwd_direction)     
+            else: 
+                self.cardinal_search(current_cell, fwd_direction)    
+                
+        ###########################PROPAGATE###########################
+        return path
+
+    def ordinal_search(self,current_cell, fwd_direction):
+
+        #get directions for cardinal search
+        i = compass.index(fwd_direction)
+        if i+1 > 7: j = 0
+        else: j = i+1
+        
+        #perform cardinal search for both sides
+        self.cardinal_search(current_cell, compass[i-1])
+        self.cardinal_search(current_cell, compass[j])
+
+        while True:
+            #Get forward cell
+            fwd_cell = self.occ_grid.idx2cell((current_cell[7][0] + fwd_direction[0],current_cell[7][1] + fwd_direction[1]))
+            #check for forced neighbours
+            forced_nbs = self.get_forced_neighbours(current_cell, fwd_direction)
+
+            #check forced_nb exists and add to open list if cheaper
+            if forced_nbs is not None:
+                for forced_nb in forced_nbs:
+                    ############COMPARE G COST############
+                    a = forced_nb[7]
+                    b = current_cell[7]
+                    dj = fabs(a[1] - b[1])
+                    di = fabs(a[0] - b[0])
+                    if dj > di:
+                        a0 = di
+                        a1 = dj-di
+                    else:
+                        a0 = dj
+                        a1 = di-dj
+                    dist_sep_g_cost = [float64(a0), float64(a1), SQRT2 * float64(a0) + float64(a1)]
+                    A = dist_sep_g_cost
+                    B = current_cell[2]
+                    C = [A[0] + B[0] , A[1] + B[1], A[2] + B[2] ] 
+                    tentative_g_cost = C   
+                    ############COMPARE G COST############
+                    if forced_nb[2][2] > tentative_g_cost[2]:
+                        forced_nb[2] = tentative_g_cost
+                        forced_nb[1] = [forced_nb[2][0] + forced_nb[3][0], forced_nb[2][1] + forced_nb[3][1], forced_nb[2][2] + forced_nb[3][2]]                         
+                        forced_nb[5] = current_cell
+                        forced_nb[10] = [current_cell[7][0], current_cell[7][1]]
+                        #open_list_add(forced_nb)
+                        if not self.open_list:
+                            self.open_list.append(forced_nb)
+                        else: 
+                            i = 0; nl = len(self.open_list)
+                            while i < nl:
+                                list_cell = self.open_list[i] 
+                                if forced_nb[1][2] < list_cell[1][2]:
+                                    break
+                                elif forced_nb[1][2] == list_cell[1][2] and forced_nb[3][2] < list_cell[3][2]: 
+                                    break
+                                i += 1 
+                            self.open_list.insert(i, forced_nb)                    
+                        #end of open_list_add(forced_nb)
+
+                #Check if front cell is accessible and add to open list if cheaper
+                if fwd_cell is not None and (fwd_cell[9] <= L_THRESH and not fwd_cell[8]):
+                    
+                    ############COMPARE G COST############
+                    a = fwd_cell[7]
+                    b = current_cell[7]
+                    dj = fabs(a[1] - b[1])
+                    di = fabs(a[0] - b[0])
+                    if dj > di:
+                        a0 = di
+                        a1 = dj-di
+                    else:
+                        a0 = dj
+                        a1 = di-dj
+                    dist_sep_g_cost = [float64(a0), float64(a1), SQRT2 * float64(a0) + float64(a1)]
+                    A = dist_sep_g_cost
+                    B = current_cell[2]
+                    C = [A[0] + B[0] , A[1] + B[1], A[2] + B[2] ]   
+                    tentative_g_cost = C
+                    ############COMPARE G COST############
+                    if fwd_cell[2][2] > tentative_g_cost[2]:
+                        fwd_cell[2] = tentative_g_cost
+                        fwd_cell[1] = [fwd_cell[2][0] + fwd_cell[3][0], fwd_cell[2][1] + fwd_cell[3][1], fwd_cell[2][2] + fwd_cell[3][2]] 
+                        fwd_cell[5] = current_cell
+                        fwd_cell[10] = [current_cell[7][0], current_cell[7][1]]
+                        ############ADD to openlist############
+                        if not self.open_list:
+                            self.open_list.append(fwd_cell)
+                        else: 
+                            i = 0; nl = len(self.open_list)
+                            while i < nl:
+                                list_cell = self.open_list[i] 
+                                if fwd_cell[1][2] < list_cell[1][2]:
+                                    break
+                                elif fwd_cell[1][2] == list_cell[1][2] and fwd_cell[3][2] < list_cell[3][2]: 
+                                    break
+                                i += 1
+                            self.open_list.insert(i, fwd_cell)                     
+                        ############ADD to openlist############
+                break
+            #move forward if forced_nb doesn't exist
+            elif fwd_cell is not None and (fwd_cell[9] <= L_THRESH and not fwd_cell[8]):
+                current_cell =  fwd_cell
+            #break search if cannot move forward
+            else:
+                break
+
+    def cardinal_search(self, current_cell, fwd_direction):
+
+        while True:
+            #Get forward cell
+            fwd_cell = self.occ_grid.idx2cell((current_cell[7][0] + fwd_direction[0],current_cell[7][1] + fwd_direction[1]))
+            #check for forced neighbours
+            forced_nbs = self.get_forced_neighbours(current_cell, fwd_direction)
+
+            #check forced_nb exists and add to open list if cheaper
+            if forced_nbs is not None:
+                #Loop through and add forced neighbour to open list if it is cheaper
+                for forced_nb in forced_nbs:
+
+                    ############COMPARE G COST############
+                    a = forced_nb[7]
+                    b = current_cell[7]
+                    dj = fabs(a[1] - b[1])
+                    di = fabs(a[0] - b[0])
+                    if dj > di:
+                        a0 = di
+                        a1 = dj-di
+                    else:
+                        a0 = dj
+                        a1 = di-dj
+                    dist_sep_g_cost = [float64(a0), float64(a1), SQRT2 * float64(a0) + float64(a1)]
+                    A = dist_sep_g_cost
+                    B = current_cell[2]
+                    C = [A[0] + B[0] , A[1] + B[1], A[2] + B[2] ] 
+                    tentative_g_cost = C   
+                    ############COMPARE G COST############
+
+                    if forced_nb[2][2] > tentative_g_cost[2]:
+                        forced_nb[2] = tentative_g_cost
+                        forced_nb[1] = [forced_nb[2][0] + forced_nb[3][0], forced_nb[2][1] + forced_nb[3][1], forced_nb[2][2] + forced_nb[3][2]]                         
+                        forced_nb[5] = current_cell
+                        forced_nb[10] = [current_cell[7][0], current_cell[7][1]]
+                        #open_list_add(forced_nb)
+                        if not self.open_list:
+                            self.open_list.append(forced_nb)
+                        else: 
+                            i = 0; nl = len(self.open_list)
+                            while i < nl:
+                                list_cell = self.open_list[i] 
+                                if forced_nb[1][2] < list_cell[1][2]:
+                                    break
+                                elif forced_nb[1][2] == list_cell[1][2] and forced_nb[3][2] < list_cell[3][2]: 
+                                    break
+                                i += 1 
+                            self.open_list.insert(i, forced_nb)                    
+                        #end of open_list_add(forced_nb)
+
+                #Check if front cell is accessible and add to open list if cheaper
+                if fwd_cell is not None and (fwd_cell[9] <= L_THRESH and not fwd_cell[8]):
+                    
+                    ############COMPARE G COST############
+                    a = fwd_cell[7]
+                    b = current_cell[7]
+                    dj = fabs(a[1] - b[1])
+                    di = fabs(a[0] - b[0])
+                    if dj > di:
+                        a0 = di
+                        a1 = dj-di
+                    else:
+                        a0 = dj
+                        a1 = di-dj
+                    dist_sep_g_cost = [float64(a0), float64(a1), SQRT2 * float64(a0) + float64(a1)]
+                    A = dist_sep_g_cost
+                    B = current_cell[2]
+                    C = [A[0] + B[0] , A[1] + B[1], A[2] + B[2] ]   
+                    tentative_g_cost = C
+                    ############COMPARE G COST############
+                    if fwd_cell[2][2] > tentative_g_cost[2]:
+                        fwd_cell[2] = tentative_g_cost
+                        fwd_cell[1] = [fwd_cell[2][0] + fwd_cell[3][0], fwd_cell[2][1] + fwd_cell[3][1], fwd_cell[2][2] + fwd_cell[3][2]] 
+                        fwd_cell[5] = current_cell
+                        fwd_cell[10] = [current_cell[7][0], current_cell[7][1]]
+                        ############ADD to openlist############
+                        if not self.open_list:
+                            self.open_list.append(fwd_cell)
+                        else: 
+                            i = 0; nl = len(self.open_list)
+                            while i < nl:
+                                list_cell = self.open_list[i] 
+                                if fwd_cell[1][2] < list_cell[1][2]:
+                                    break
+                                elif fwd_cell[1][2] == list_cell[1][2] and fwd_cell[3][2] < list_cell[3][2]: 
+                                    break
+                                i += 1
+                            self.open_list.insert(i, fwd_cell)                     
+                        ############ADD to openlist############
+                break
+            #move forward if forced_nb doesn't exist
+            elif fwd_cell is not None and (fwd_cell[9] <= L_THRESH and not fwd_cell[8]):
+                current_cell =  fwd_cell
+            #break search if cannot move forward
+            else:
+                break
+    
+    def get_free_neighbors(self, cell):
+        # start from +x (N), counter clockwise
+        neighbors = []
+        for rel_idx in REL_IDX:
+            nb_idx = (rel_idx[0] + cell[7][0], rel_idx[1] + cell[7][1]) #non-numpy
+            nb_cell =  self.occ_grid.idx2cell(nb_idx)
+            #if nb_cell exists and nb_cell is free
+            if nb_cell is not None and (nb_cell[9] <= L_THRESH and not nb_cell[8]):
+                neighbors.append(nb_cell)
+        return neighbors
+
+    def get_forced_neighbours(self, current_cell, direction):
+        i = compass.index(direction)
+        idx_0 = current_cell[7][0]
+        idx_1 = current_cell[7][1]
+        i_plus_1 = i+1
+        i_plus_2 = i+2
+        if i == 6:
+            i_plus_1 = 7
+            i_plus_2 = 0
+        if i == 7:
+            i_plus_1 = 0
+            i_plus_2 = 1
+
+        nbs = []
+        fwd_cell = self.occ_grid.idx2cell((idx_0 + direction[0],idx_1 + direction[1]))
+    
+        #Only checks for forced neighbours if fwd cell is not occupied
+        if fwd_cell is not None and (fwd_cell[9] <= L_THRESH and not fwd_cell[8]):
+            L_cell = self.occ_grid.idx2cell( (idx_0 + (compass[i-2])[0], idx_1 + (compass[i-2])[1] )) #potential obstacle
+            R_cell = self.occ_grid.idx2cell(( idx_0 + (compass[i_plus_2])[0], idx_1 + (compass[i_plus_2])[1] )) #potential obstacle           
+            
+            #Check left and right cells for forced nb
+            if (L_cell is not None) and not (L_cell[9] <= L_THRESH and not L_cell[8]):
+                L_diag_cell = self.occ_grid.idx2cell(( idx_0 + (compass[i-1])[0], idx_1 + (compass[i-1])[1] )) #potential forced neighbour
+                if L_diag_cell is not None and (L_diag_cell[9] <= L_THRESH and not L_diag_cell[8]): 
+                    nbs.append(L_diag_cell)
+                    
+            if (R_cell is not None) and not (L_cell[9] <= L_THRESH and not L_cell[8]):
+                R_diag_cell = self.occ_grid.idx2cell(( idx_0 + (compass[i_plus_1])[0], idx_1 + (compass[i_plus_1])[1] )) #potential forced neighbour
+                if R_diag_cell is not None and (R_diag_cell[9] <= L_THRESH and not R_diag_cell[8]): 
+                    nbs.append(R_diag_cell)
+        return nbs
+
+
 
 # ================================ BEGIN ===========================================
 def main(goals, cell_size, min_pos, max_pos):
@@ -103,7 +448,7 @@ def main(goals, cell_size, min_pos, max_pos):
     los = lab3_aux.GeneralLOS()
     los_int = lab3_aux.GeneralIntLOS()
     # ~ moved motion model to lab3_move.py    
-    planner = lab3_aux.Astar(occ_grid)
+    planner = JPS(occ_grid)
     
     # ~ Cache methods for slightly faster access
     update_at_idx = occ_grid.update_at_idx
